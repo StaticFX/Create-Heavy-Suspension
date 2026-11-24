@@ -1,6 +1,4 @@
 use glam::DVec3;
-use serde::Serialize;
-use tsify::Tsify;
 use crate::engine::is_usable_mass;
 use crate::sable::MassData;
 use crate::wheels::Wheel;
@@ -10,7 +8,7 @@ pub const SPRING_FREQUENCY: i32 = 10;
 pub const SPRING_STABILITY: f64 = 1.5;
 pub const DAMPING_RATIO: f64 = 0.7;
 
-#[derive(Clone, Copy, Debug, Tsify, Serialize)]
+#[derive(Clone, Copy, Debug)]
 pub struct Suspension {
     pub springiness: f64,
     pub heave_damping: f64,
