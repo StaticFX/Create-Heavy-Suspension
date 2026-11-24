@@ -1,4 +1,4 @@
-package de.staticfx.heavysuspension;
+package de.staticfx.heavysuspension.behaviors;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
@@ -18,6 +18,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.LevelAccessor;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.BlockHitResult;
@@ -44,6 +45,11 @@ public class StiffnessBehaviour extends ScrollValueBehaviour {
 
     public double multiplier() {
         return value / 100.0;
+    }
+
+    public static double multiplierOf(BlockEntity wheel) {
+        StiffnessBehaviour stiffness = wheel instanceof SmartBlockEntity smart ? smart.getBehaviour(TYPE) : null;
+        return stiffness == null ? 1 : stiffness.multiplier();
     }
 
     @Override

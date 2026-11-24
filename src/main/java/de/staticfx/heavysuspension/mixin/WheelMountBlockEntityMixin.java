@@ -4,7 +4,7 @@ import com.llamalad7.mixinextras.sugar.Local;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollValueBehaviour;
-import de.staticfx.heavysuspension.StiffnessBehaviour;
+import de.staticfx.heavysuspension.behaviors.StiffnessBehaviour;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Unique;

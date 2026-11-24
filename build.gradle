@@ -13,6 +13,18 @@ repositories {
     maven { url = "https://maven.createmod.net" }
     maven { url = "https://mvn.devos.one/snapshots" } // Registrate
     maven { url = "https://maven.blamejared.com/" }
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "RyanHCode Maven"
+                url = "https://maven.ryanhcode.dev/releases"
+            }
+        }
+        filter {
+            includeGroup("dev.ryanhcode.sable")
+            includeGroup("dev.ryanhcode.sable-companion")
+        }
+    }
 }
 
 base {
@@ -47,14 +59,31 @@ neoForge {
 }
 
 dependencies {
-    // Create is the only compile dependency: the Offroad wheel mount is targeted by name, so the
-    // Aeronautics bundle is needed at runtime only (drop it into run/mods for a dev client).
     implementation("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") { transitive = false }
     implementation("net.createmod.ponder:ponder-neoforge:${ponder_version}+mc${minecraft_version}")
+    compileOnly("dev.ryanhcode.sable:sable-neoforge-${minecraft_version}:${sable_version}") { transitive = false }
+    compileOnly("dev.ryanhcode.sable-companion:sable-companion-common-${minecraft_version}:${sable_companion_version}")
+    compileOnly("com.dylibso.chicory:runtime:1.7.5")
     compileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-${minecraft_version}:${flywheel_version}")
     runtimeOnly("dev.engine-room.flywheel:flywheel-neoforge-${minecraft_version}:${flywheel_version}")
-    // Create's full jar bundles Registrate; the :slim artifact does not, and Aeronautics needs it at runtime.
     runtimeOnly("com.tterrag.registrate:Registrate:${registrate_version}")
+
+    //chicory
+    jarJar(implementation("com.dylibso.chicory:runtime")) {
+        version {
+            strictly '[1.7.5,2.0)'
+            prefer '1.7.5'
+        }
+    }
+    jarJar(implementation("com.dylibso.chicory:wasm")) {
+        version {
+            strictly '[1.7.5,2.0)'
+            prefer '1.7.5'
+        }
+    }
+    additionalRuntimeClasspath "com.dylibso.chicory:runtime:1.7.5"
+    additionalRuntimeClasspath "com.dylibso.chicory:wasm:1.7.5"
+
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
@@ -75,8 +104,27 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
     into "build/generated/sources/modMetadata"
 }
 
+var buildWasm = tasks.register("buildWasm", Exec) {
+    workingDir file("src/lib")
+    commandLine "cargo", "build", "--release", "--target", "wasm32-unknown-unknown"
+    inputs.dir("src/lib/src")
+    inputs.file("src/lib/Cargo.toml")
+    inputs.file("src/lib/Cargo.lock")
+    outputs.file("src/lib/target/wasm32-unknown-unknown/release/create_hs_physics.wasm")
+}
+
+var copyWasm = tasks.register("copyWasm", Copy) {
+    from buildWasm
+    into layout.buildDirectory.dir("generated/wasm")
+    rename { "hs_physics.wasm" }
+}
+
 sourceSets.main.resources.srcDir generateModMetadata
 neoForge.ideSyncTask generateModMetadata
+sourceSets.main.resources.srcDir copyWasm
+neoForge.ideSyncTask copyWasm
+
+
 
 idea {
     module {

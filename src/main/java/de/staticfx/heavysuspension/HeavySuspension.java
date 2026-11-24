@@ -9,5 +9,8 @@ public class HeavySuspension {
 
     public HeavySuspension() throws ClassNotFoundException {
         Class.forName(WHEEL_MOUNT, false, HeavySuspension.class.getClassLoader());
+
+        PhysicsBridge.readAbi();
+
     }
 }
