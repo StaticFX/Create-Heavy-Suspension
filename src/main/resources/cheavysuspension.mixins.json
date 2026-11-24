@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "de.staticfx.heavysuspension.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "WheelMountBlockEntityMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

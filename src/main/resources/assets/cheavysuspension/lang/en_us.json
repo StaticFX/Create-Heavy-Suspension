@@ -1,0 +1,6 @@
+{
+  "cheavysuspension.scroll_option.stiffness": "Suspension Stiffness",
+  "cheavysuspension.scroll_option.stiffness.fine": "0.25× Steps",
+  "cheavysuspension.scroll_option.stiffness.coarse": "1× Steps",
+  "cheavysuspension.scroll_option.stiffness.supercoarse": "10× Steps"
+}
