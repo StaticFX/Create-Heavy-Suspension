@@ -17,3 +17,7 @@ impl Suspension {
         }
     }
 }
+
+pub fn max_suspension(mass: f64, dt: f64) -> f64 {
+    1.5 * mass
+}
