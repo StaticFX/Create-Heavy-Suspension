@@ -5,8 +5,8 @@ use crate::sable::MassData;
 use crate::suspension::{target_tension, SPRING_FREQUENCY, SPRING_STABILITY, max_tension, Suspension};
 
 pub struct Wheel {
-    touch_point: DVec3,
-    stiffness_multiplier: f64,
+    pub touch_point: DVec3,
+    pub stiffness_multiplier: f64,
 }
 
 type Load = Vec<f64>;

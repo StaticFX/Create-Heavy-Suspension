@@ -1,8 +1,14 @@
+use glam::DVec3;
 use serde::Serialize;
 use tsify::Tsify;
+use crate::engine::is_usable_mass;
+use crate::sable::MassData;
+use crate::wheels::Wheel;
 
+// TODO: Make config derived
 pub const SPRING_FREQUENCY: i32 = 10;
 pub const SPRING_STABILITY: f64 = 1.5;
+pub const DAMPING_RATIO: f64 = 0.7;
 
 #[derive(Clone, Copy, Debug, Tsify, Serialize)]
 pub struct Suspension {
@@ -21,6 +27,32 @@ impl Suspension {
     }
 }
 
+fn critical_damping(spring: f64, mass: f64) -> f64 {
+    2.0 * DAMPING_RATIO * (spring * mass).sqrt()
+}
+
+pub fn suspension_for_wheel(
+    wheel: &Wheel,
+    load_fraction: f64,
+    spring_scale: f64,
+    wheel_count: usize,
+    mass: &MassData,
+    dt: f64,
+) -> Option<Suspension> {
+    let normal_mass = 1.0 / mass.inverse_normal_mass(wheel.touch_point, DVec3::Y);
+    if !is_usable_mass(normal_mass) || !is_usable_mass(mass.total_mass) {
+        return None;
+    }
+
+    let wheels = wheel_count as f64;
+    let load_share = mass.total_mass * load_fraction;
+
+    let spring = (target_tension(load_share, wheel.stiffness_multiplier) * spring_scale).min(max_tension(normal_mass, wheel_count, dt));
+    let heave_damping = critical_damping(spring, load_share).min(mass.total_mass / (wheels * dt));
+    let rotation_damping = critical_damping(spring, normal_mass).min(normal_mass / (wheels * dt));
+
+    Some(Suspension { springiness: spring, heave_damping, rotation_damping })
+}
 
 pub fn target_tension(load_share: f64, multiplier: f64) -> f64 {
     load_share * (SPRING_FREQUENCY as f64) * (SPRING_FREQUENCY as f64) * multiplier
