@@ -27,19 +27,32 @@ public abstract class WheelMountBlockEntityMixin {
         behaviours.add(new StiffnessBehaviour((SmartBlockEntity) (Object) this));
     }
 
+    @Unique
+    private static final double DAMPING_RATIO = 0.7;
+
     @ModifyVariable(method = "sable$physicsTick", at = @At("STORE"), name = "effectiveStrength")
     private double heavysuspension$tuneToRealMass(double effectiveStrength, @Local(name = "normalMass") double normalMass) {
-        return Double.isFinite(normalMass) && normalMass > 0 ? normalMass : effectiveStrength;
+        return heavysuspension$isUsableMass(normalMass) ? normalMass : effectiveStrength;
     }
 
     @ModifyVariable(method = "sable$physicsTick", at = @At("STORE"), name = "springStrength")
-    private double heavysuspension$stiffenSpring(double springStrength) {
-        return springStrength * heavysuspension$stiffnessMultiplier();
+    private double heavysuspension$stiffenSpring(double springStrength, @Local(name = "normalMass") double normalMass, @Local(argsOnly = true) double timeStep) {
+        double stiffened = springStrength * heavysuspension$stiffnessMultiplier();
+        if (!heavysuspension$isUsableMass(normalMass))
+            return stiffened;
+        return Math.min(stiffened, normalMass / (timeStep * timeStep));
     }
 
     @ModifyVariable(method = "sable$physicsTick", at = @At("STORE"), name = "dampingStrength")
-    private double heavysuspension$keepDampingRatio(double dampingStrength) {
-        return dampingStrength * Math.sqrt(heavysuspension$stiffnessMultiplier());
+    private double heavysuspension$applyDampingRatio(double dampingStrength, @Local(name = "springStrength") double springStrength, @Local(name = "normalMass") double normalMass) {
+        if (!heavysuspension$isUsableMass(normalMass))
+            return dampingStrength * Math.sqrt(heavysuspension$stiffnessMultiplier());
+        return 2 * DAMPING_RATIO * Math.sqrt(springStrength * normalMass);
+    }
+
+    @Unique
+    private static boolean heavysuspension$isUsableMass(double mass) {
+        return Double.isFinite(mass) && mass > 0;
     }
 
     @Unique
