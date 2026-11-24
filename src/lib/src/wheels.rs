@@ -1,6 +1,6 @@
 use std::cmp::min;
 use glam::{DMat2, DVec2, DVec3};
-use crate::engine::Coordinate;
+use crate::engine::is_usable_mass;
 use crate::sable::MassData;
 
 pub struct Layout {
@@ -9,18 +9,18 @@ pub struct Layout {
 }
 
 pub struct Wheel {
-    // how much of the total load this wheel carries
-    load: f64,
-    spring: f64,
+    touch_point: DVec3,
+    stiffness_multiplier: f64,
 }
 
 type Load = Vec<f64>;
 
-pub fn calculate_load(touch_points: Vec<DVec2>, center_of_mass: DVec2) -> Load {
+
+pub fn calculate_load(touch_points: &[Wheel], center_of_mass: DVec2) -> Load {
     let len = touch_points.len() as f64;
 
-    let center_of_wheels: DVec2 = touch_points.iter().sum::<DVec2>() / len;
-    let offsets: Vec<DVec2> = touch_points.iter().map(|t| t - center_of_wheels).collect();
+    let center_of_wheels: DVec2 = touch_points.iter().map(|w| DVec2::new(w.touch_point.x, w.touch_point.z)).sum::<DVec2>() / len;
+    let offsets: Vec<DVec2> = touch_points.iter().map(|w| DVec2::new(w.touch_point.x, w.touch_point.z)).map(|t| t - center_of_wheels).collect();
     let mass_offset = center_of_wheels - center_of_mass;
 
     let spread = offsets.iter().fold(
@@ -39,20 +39,31 @@ pub fn calculate_load(touch_points: Vec<DVec2>, center_of_mass: DVec2) -> Load {
     fractions.iter().map(|f| f / total).collect()
 }
 
-pub fn calculate_relative_spring_tension(wheels: Vec<Wheel>, touch_points: Vec<DVec3>, load: Load, mass: MassData) -> f64 {
+pub fn calculate_relative_spring_tension(wheels: Vec<Wheel>, load: Load, mass: MassData, dt: f64) -> f64 {
     let smallest_spring = wheels.iter()
-        .map(|w| w.spring)
-        .min_by(|w, o| w.total_cmp(o))
+        .map(|w| w.stiffness_multiplier)
+        .min_by(f64::total_cmp)
         .unwrap_or(1f64);
 
-    let mut scale = 1f64;
+    wheels
+        .iter()
+        .zip(load)
+        .filter_map(|(wheel, fraction)| {
+            let normal_mass = 1.0 / mass.inverse_normal_mass(wheel.touch_point, DVec3::Y);
+            if !is_usable_mass(normal_mass) {
+                return None;
+            }
+            let target = target_tension(mass.total_mass * fraction, smallest_spring);
+            Some(max_tension(normal_mass, wheels.len(), dt) / target)
+        })
+        .fold(1.0, f64::min)
 
-    for (index, wheel) in wheels.iter().enumerate() {
-        let touch_point = touch_points[index];
-        let normalized_mass = 1f64 / mass.inverse_normal_mass(touch_point, DVec3::new(0f64,1f64,0f64));
+}
 
-        let target_tension =  mass.total_mass * load[index] * smallest_spring;
-    }
+fn target_tension(load_share: f64, multiplier: f64) -> f64 {
+    load_share * multiplier
+}
 
-
+pub fn max_tension(normal_mass: f64, wheel_count: usize, dt: f64) -> f64 {
+    normal_mass / (wheel_count as f64 * dt * dt)
 }
