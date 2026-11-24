@@ -2,11 +2,7 @@ use std::cmp::min;
 use glam::{DMat2, DVec2, DVec3};
 use crate::engine::is_usable_mass;
 use crate::sable::MassData;
-
-pub struct Layout {
-    wheels: Vec<Wheel>,
-
-}
+use crate::suspension::{target_tension, SPRING_FREQUENCY, SPRING_STABILITY, max_tension, Suspension};
 
 pub struct Wheel {
     touch_point: DVec3,
@@ -15,12 +11,34 @@ pub struct Wheel {
 
 type Load = Vec<f64>;
 
+pub struct WheelImpulses {
+    pub at_wheel: f64,
+    pub at_center_of_mass: f64
+}
 
-pub fn calculate_load(touch_points: &[Wheel], center_of_mass: DVec2) -> Load {
-    let len = touch_points.len() as f64;
+impl WheelImpulses {
+    pub fn new(at_wheel: f64, at_center_of_mass: f64) -> Self {
+        WheelImpulses {
+            at_wheel,
+            at_center_of_mass
+        }
+    }
+}
 
-    let center_of_wheels: DVec2 = touch_points.iter().map(|w| DVec2::new(w.touch_point.x, w.touch_point.z)).sum::<DVec2>() / len;
-    let offsets: Vec<DVec2> = touch_points.iter().map(|w| DVec2::new(w.touch_point.x, w.touch_point.z)).map(|t| t - center_of_wheels).collect();
+impl Default for WheelImpulses {
+    fn default() -> Self {
+        WheelImpulses {
+            at_wheel: 0.0,
+            at_center_of_mass: 0.0,
+        }
+    }
+}
+
+pub fn calculate_load(wheels: &[Wheel], center_of_mass: DVec2) -> Load {
+    let len = wheels.len() as f64;
+
+    let center_of_wheels: DVec2 = wheels.iter().map(|w| DVec2::new(w.touch_point.x, w.touch_point.z)).sum::<DVec2>() / len;
+    let offsets: Vec<DVec2> = wheels.iter().map(|w| DVec2::new(w.touch_point.x, w.touch_point.z)).map(|t| t - center_of_wheels).collect();
     let mass_offset = center_of_wheels - center_of_mass;
 
     let spread = offsets.iter().fold(
@@ -39,7 +57,7 @@ pub fn calculate_load(touch_points: &[Wheel], center_of_mass: DVec2) -> Load {
     fractions.iter().map(|f| f / total).collect()
 }
 
-pub fn calculate_relative_spring_tension(wheels: Vec<Wheel>, load: Load, mass: MassData, dt: f64) -> f64 {
+pub fn calculate_relative_spring_tension(wheels: &[Wheel], load: &Load, mass: &MassData, dt: f64) -> f64 {
     let smallest_spring = wheels.iter()
         .map(|w| w.stiffness_multiplier)
         .min_by(f64::total_cmp)
@@ -57,13 +75,26 @@ pub fn calculate_relative_spring_tension(wheels: Vec<Wheel>, load: Load, mass: M
             Some(max_tension(normal_mass, wheels.len(), dt) / target)
         })
         .fold(1.0, f64::min)
-
 }
 
-fn target_tension(load_share: f64, multiplier: f64) -> f64 {
-    load_share * multiplier
-}
+pub fn calculate_wheel_impulses(
+    suspension: &Suspension,
+    spring_compression: f64,
+    wheel_velocity: f64,
+    vehicle_velocity: f64,
+    dt: f64
+) -> WheelImpulses {
+    if spring_compression <= 0.0 {
+        return WheelImpulses::default();
+    }
 
-pub fn max_tension(normal_mass: f64, wheel_count: usize, dt: f64) -> f64 {
-    normal_mass / (wheel_count as f64 * dt * dt)
+    let rotation_velocity = wheel_velocity - vehicle_velocity;
+    let spring_force = suspension.springiness * spring_compression;
+    let rotation_dampening = -suspension.rotation_damping * rotation_velocity;
+
+    let velocity_at_wheel = ((spring_force + rotation_dampening) * dt).max(0.0);
+    let heave_dampening = -suspension.heave_damping * vehicle_velocity;
+    let at_com = (heave_dampening * dt).max(-velocity_at_wheel);
+
+    WheelImpulses::new(velocity_at_wheel, at_com)
 }
