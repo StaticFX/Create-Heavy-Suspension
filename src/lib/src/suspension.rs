@@ -15,6 +15,12 @@ pub struct Suspension {
     pub rotation_damping: f64
 }
 
+pub struct SuspensionConfig {
+    spring_frequency: i32,
+    spring_stability: f64,
+    damping_ration: f64,
+}
+
 impl Suspension {
     pub fn new(springiness: f64, heave_damping: f64, rotation_damping: f64) -> Self {
         Suspension {
@@ -29,24 +35,24 @@ fn critical_damping(spring: f64, mass: f64) -> f64 {
     2.0 * DAMPING_RATIO * (spring * mass).sqrt()
 }
 
-pub fn suspension_for_wheel(
-    wheel: &Wheel,
+pub fn suspension_for_normal_mass(
+    total_mass: f64,
+    normal_mass: f64,
     load_fraction: f64,
+    stiffness_multiplier: f64,
     spring_scale: f64,
     wheel_count: usize,
-    mass: &MassData,
     dt: f64,
 ) -> Option<Suspension> {
-    let normal_mass = 1.0 / mass.inverse_normal_mass(wheel.touch_point, DVec3::Y);
-    if !is_usable_mass(normal_mass) || !is_usable_mass(mass.total_mass) {
+    if !is_usable_mass(normal_mass) || !is_usable_mass(total_mass) || wheel_count == 0 {
         return None;
     }
 
     let wheels = wheel_count as f64;
-    let load_share = mass.total_mass * load_fraction;
+    let load_share = total_mass * load_fraction;
 
-    let spring = (target_tension(load_share, wheel.stiffness_multiplier) * spring_scale).min(max_tension(normal_mass, wheel_count, dt));
-    let heave_damping = critical_damping(spring, load_share).min(mass.total_mass / (wheels * dt));
+    let spring = (target_tension(load_share, stiffness_multiplier) * spring_scale).min(max_tension(normal_mass, wheel_count, dt));
+    let heave_damping = critical_damping(spring, load_share).min(total_mass / (wheels * dt));
     let rotation_damping = critical_damping(spring, normal_mass).min(normal_mass / (wheels * dt));
 
     Some(Suspension { springiness: spring, heave_damping, rotation_damping })
