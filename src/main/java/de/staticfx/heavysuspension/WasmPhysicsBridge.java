@@ -4,6 +4,7 @@ import com.dylibso.chicory.runtime.ExportFunction;
 import com.dylibso.chicory.runtime.Instance;
 import com.dylibso.chicory.runtime.Memory;
 import com.dylibso.chicory.wasm.Parser;
+import com.dylibso.chicory.wasm.types.Value;
 import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
 
@@ -58,6 +59,25 @@ public class WasmPhysicsBridge {
         return null;
     }
 
+    public Instance getWasmInstance() {
+        return wasmInstance;
+    }
+
+    synchronized int alloc(int length) {
+        return (int) alloc.apply(length)[0];
+    }
+
+    synchronized void dealloc(int ptr, int length) {
+        dealloc.apply(ptr, length);
+    }
+
+    synchronized byte[] bytesFromIntArray(int[] input) {
+        ByteBuffer bb = ByteBuffer.allocate(input.length * Integer.BYTES)
+                .order(ByteOrder.LITTLE_ENDIAN);
+        bb.asIntBuffer().put(input);
+        return bb.array();
+    }
+
     public synchronized void sum(int[] input) {
         ByteBuffer bb = ByteBuffer.allocate(input.length * Integer.BYTES)
                 .order(ByteOrder.LITTLE_ENDIAN);
@@ -73,7 +93,14 @@ public class WasmPhysicsBridge {
         } finally {
             dealloc.apply(ptr, bytes.length);
         }
+    }
 
+    public long f64(double in) {
+        return Value.doubleToLong(in);
+    }
+
+    public double fromf64(int ptr, int index) {
+        return memory.readDouble(ptr + index * Double.BYTES);
     }
 
 }
