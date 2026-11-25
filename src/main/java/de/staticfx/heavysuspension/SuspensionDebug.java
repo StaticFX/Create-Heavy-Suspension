@@ -1,7 +1,6 @@
 package de.staticfx.heavysuspension;
 
 import com.mojang.logging.LogUtils;
-import de.staticfx.heavysuspension.data.WheelTuning;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import org.slf4j.Logger;
 
@@ -13,23 +12,17 @@ public final class SuspensionDebug {
     private SuspensionDebug() {
     }
 
-    public static void logWheel(BlockEntity wheel, WheelTuning tuning, double compression,
-                                double wheelImpulse, double heaveImpulse,
-                                double heaveVelocity, double rotationVelocity) {
-        if (!ENABLED || wheel.getLevel() == null)
+    public static void logWheel(BlockEntity wheel, double compression, double impulse, double offroadImpulse) {
+        if (!ENABLED || wheel.getLevel() == null) {
             return;
+        }
 
-        LOGGER.info("[HS] tick={} wheel={} compression={} wheelImpulse={} heaveImpulse={} heaveVel={} rotVel={} spring={} heaveDamp={} rotDamp={}",
+        LOGGER.info("[HS] tick={} wheel={} compression={} impulse={} offroadImpulse={}",
                 wheel.getLevel().getGameTime(),
                 wheel.getBlockPos().toShortString(),
                 format(compression),
-                format(wheelImpulse),
-                format(heaveImpulse),
-                format(heaveVelocity),
-                format(rotationVelocity),
-                tuning == null ? "-" : format(tuning.springiness()),
-                tuning == null ? "-" : format(tuning.heaveDamping()),
-                tuning == null ? "-" : format(tuning.rotationDamping()));
+                format(impulse),
+                format(offroadImpulse));
     }
 
     private static String format(double value) {

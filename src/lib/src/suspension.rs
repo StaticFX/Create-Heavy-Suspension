@@ -31,7 +31,7 @@ impl Suspension {
     }
 }
 
-fn critical_damping(spring: f64, mass: f64) -> f64 {
+pub fn critical_damping(spring: f64, mass: f64) -> f64 {
     2.0 * DAMPING_RATIO * (spring * mass).sqrt()
 }
 

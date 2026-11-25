@@ -3,17 +3,16 @@ package de.staticfx.heavysuspension;
 import com.dylibso.chicory.runtime.ExportFunction;
 import com.dylibso.chicory.runtime.Instance;
 import com.dylibso.chicory.runtime.Memory;
-import com.dylibso.chicory.wasm.Parser;
 import com.dylibso.chicory.wasm.types.Value;
 import com.mojang.logging.LogUtils;
+import de.staticfx.heavysuspension.physics.wasm.HsPhysicsModule;
 import org.slf4j.Logger;
 
-import java.io.InputStream;
 
 public class WasmPhysicsBridge {
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    private static final int ABI_VERSION = 3;
+    private static final int ABI_VERSION = 4;
 
     public static WasmPhysicsBridge INSTACE = load();
 
@@ -32,13 +31,10 @@ public class WasmPhysicsBridge {
     }
 
     private static WasmPhysicsBridge load() {
-        try (InputStream wasm = WasmPhysicsBridge.class.getResourceAsStream("/hs_physics.wasm")) {
-            if (wasm == null) {
-                LOGGER.error("Cant load wasm");
-                return null;
-            }
-
-            Instance instance = Instance.builder(Parser.parse(wasm)).build();
+        try {
+            Instance instance = Instance.builder(HsPhysicsModule.load())
+                    .withMachineFactory(HsPhysicsModule::create)
+                    .build();
             long version = instance.export("abi_version").apply()[0];
 
             if (version != ABI_VERSION) {
@@ -48,7 +44,7 @@ public class WasmPhysicsBridge {
 
             LOGGER.info("Hs physics loaded, abi_version = {}", version);
             return new WasmPhysicsBridge(instance);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             LOGGER.error("Failed to load physics", e);
         }
 

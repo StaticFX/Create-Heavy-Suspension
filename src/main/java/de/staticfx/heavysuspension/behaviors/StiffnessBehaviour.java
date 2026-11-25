@@ -64,8 +64,10 @@ public class StiffnessBehaviour extends ScrollValueBehaviour {
 
     @Override
     public void setValueSettings(Player player, ValueSettings settings, boolean ctrlDown) {
-        if (settings.equals(getValueSettings()))
+        if (settings.equals(getValueSettings())) {
             return;
+        }
+
         setValue(toPercent(settings));
         playFeedbackSound(this);
     }
@@ -84,10 +86,12 @@ public class StiffnessBehaviour extends ScrollValueBehaviour {
     @Override
     public void read(CompoundTag nbt, HolderLookup.Provider registries, boolean clientPacket) {
         int percent = 100;
-        if (nbt.contains(NBT_KEY))
+        if (nbt.contains(NBT_KEY)) {
             percent = nbt.getInt(NBT_KEY);
-        else if (nbt.contains(LEGACY_NBT_KEY))
+        } else if (nbt.contains(LEGACY_NBT_KEY)) {
             percent = nbt.getInt(LEGACY_NBT_KEY) * 25;
+        }
+
         value = Math.clamp(percent, MIN_PERCENT, MAX_PERCENT);
     }
 

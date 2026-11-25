@@ -16,6 +16,7 @@ public class WasmWheelPhysics implements WheelPhysics {
 
     private final ExportFunction wasmTuneWheel;
     private final ExportFunction wasmCalcDistribution;
+    private final ExportFunction wasmSolveVehicle;
 
 
     private final int tuneWheelOutPtr;
@@ -24,6 +25,7 @@ public class WasmWheelPhysics implements WheelPhysics {
         this.bridge = bridge;
         this.wasmTuneWheel = bridge.getWasmInstance().export("suspension");
         this.wasmCalcDistribution = bridge.getWasmInstance().export("calc_distribution");
+        this.wasmSolveVehicle = bridge.getWasmInstance().export("solve_vehicle");
 
         tuneWheelOutPtr = bridge.alloc(3 * Double.BYTES);
     }
@@ -40,8 +42,9 @@ public class WasmWheelPhysics implements WheelPhysics {
                 bridge.f64(input.timeStep()),
                 tuneWheelOutPtr)[0];
 
-        if (ok == 0)
+        if (ok == 0) {
             return Optional.empty();
+        }
 
         return Optional.of(new WheelTuning(
                 bridge.fromf64(tuneWheelOutPtr, 0),
@@ -68,12 +71,14 @@ public class WasmWheelPhysics implements WheelPhysics {
         )[0];
 
         try {
-            if (ok == 0)
+            if (ok == 0) {
                 return Optional.empty();
+            }
 
             double[] fractions = new double[wheelCount];
-            for (int i = 0; i < wheelCount; i++)
+            for (int i = 0; i < wheelCount; i++) {
                 fractions[i] = bridge.fromf64(returnPointer, i);
+            }
 
             return Optional.of(new VehicleLoadDistribution(fractions));
         } finally {
@@ -81,6 +86,88 @@ public class WasmWheelPhysics implements WheelPhysics {
             bridge.dealloc(wheelPtr, wheelBytes(wheelCount));
             bridge.dealloc(returnPointer, allocSize);
         }
+    }
+
+    private static final int SOLVER_VALUES_PER_WHEEL = 7;
+    private static final int MOTION_VALUES = 9;
+
+    @Override
+    public synchronized Optional<double[]> solveVehicle(VehicleSolveInput input) {
+        int wheelCount = input.wheels().size();
+        if (wheelCount == 0) {
+            return Optional.empty();
+        }
+
+        int wheelBytes = wheelCount * SOLVER_VALUES_PER_WHEEL * Double.BYTES;
+        int motionBytes = MOTION_VALUES * Double.BYTES;
+        int impulseBytes = wheelCount * Double.BYTES;
+
+        int massPtr = writeMassToMemory(input.mass());
+        int wheelPtr = writeToMemory(solverWheelValues(input.wheels()));
+        int motionPtr = writeToMemory(motionValues(input.motion()));
+        int impulsePtr = bridge.alloc(impulseBytes);
+
+        try {
+            long ok = wasmSolveVehicle.apply(
+                    massPtr,
+                    wheelPtr,
+                    wheelCount,
+                    motionPtr,
+                    bridge.f64(input.timeStep()),
+                    impulsePtr)[0];
+
+            if (ok == 0) {
+                return Optional.empty();
+            }
+
+            double[] impulses = new double[wheelCount];
+            for (int i = 0; i < wheelCount; i++) {
+                impulses[i] = bridge.fromf64(impulsePtr, i);
+            }
+
+            return Optional.of(impulses);
+        } catch (Throwable t) {
+            return Optional.empty();
+        } finally {
+            bridge.dealloc(massPtr, MASS_BYTES);
+            bridge.dealloc(wheelPtr, wheelBytes);
+            bridge.dealloc(motionPtr, motionBytes);
+            bridge.dealloc(impulsePtr, impulseBytes);
+        }
+    }
+
+    private static double[] solverWheelValues(List<SolverWheel> wheels) {
+        double[] values = new double[wheels.size() * SOLVER_VALUES_PER_WHEEL];
+        for (int i = 0; i < wheels.size(); i++) {
+            SolverWheel wheel = wheels.get(i);
+            int offset = i * SOLVER_VALUES_PER_WHEEL;
+            values[offset] = wheel.contact().x();
+            values[offset + 1] = wheel.contact().y();
+            values[offset + 2] = wheel.contact().z();
+            values[offset + 3] = wheel.stiffnessMultiplier();
+            values[offset + 4] = wheel.loadFraction();
+            values[offset + 5] = wheel.compression();
+            values[offset + 6] = wheel.ageInSteps();
+        }
+
+        return values;
+    }
+
+    private static double[] motionValues(BodyMotion motion) {
+        Vec3 linear = motion.linearVelocity();
+        Vec3 angular = motion.angularVelocity();
+        Vec3 gravity = motion.gravity();
+
+        return new double[]{linear.x, linear.y, linear.z, angular.x, angular.y, angular.z, gravity.x, gravity.y, gravity.z};
+    }
+
+    private int writeToMemory(double[] values) {
+        int ptr = bridge.alloc(values.length * Double.BYTES);
+        for (int i = 0; i < values.length; i++) {
+            bridge.getWasmInstance().memory().writeF64(ptr + i * Double.BYTES, values[i]);
+        }
+
+        return ptr;
     }
 
     private static final int MASS_VALUES = 14;

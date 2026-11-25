@@ -33,6 +33,10 @@ base {
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
+configurations {
+    wasmCompiler
+}
+
 neoForge {
     version = project.neo_version
 
@@ -84,6 +88,8 @@ dependencies {
     additionalRuntimeClasspath "com.dylibso.chicory:runtime:1.7.5"
     additionalRuntimeClasspath "com.dylibso.chicory:wasm:1.7.5"
 
+    wasmCompiler "com.dylibso.chicory:build-time-compiler:1.7.5"
+
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
@@ -113,16 +119,39 @@ var buildWasm = tasks.register("buildWasm", Exec) {
     outputs.file("src/lib/target/wasm32-unknown-unknown/release/create_hs_physics.wasm")
 }
 
-var copyWasm = tasks.register("copyWasm", Copy) {
-    from buildWasm
-    into layout.buildDirectory.dir("generated/wasm")
-    rename { "hs_physics.wasm" }
+var wasmClasses = layout.buildDirectory.dir("generated/chicory/classes")
+var wasmSources = layout.buildDirectory.dir("generated/chicory/sources")
+
+var compileWasmToJava = tasks.register("compileWasmToJava", Exec) {
+    var launcher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    var generator = file("gradle/WasmGen.java")
+    var wasm = buildWasm.map { it.outputs.files.singleFile }
+
+    inputs.files(buildWasm)
+    inputs.file(generator)
+    inputs.files(configurations.wasmCompiler)
+    outputs.dir(wasmClasses)
+    outputs.dir(wasmSources)
+
+    doFirst {
+        delete(wasmClasses, wasmSources)
+        executable = launcher.get().executablePath.asFile.absolutePath
+        args("-cp", configurations.wasmCompiler.asPath, generator.absolutePath,
+                wasm.get().absolutePath,
+                "de.staticfx.heavysuspension.physics.wasm.HsPhysicsModule",
+                wasmClasses.get().asFile.absolutePath,
+                wasmSources.get().asFile.absolutePath)
+    }
 }
 
 sourceSets.main.resources.srcDir generateModMetadata
 neoForge.ideSyncTask generateModMetadata
-sourceSets.main.resources.srcDir copyWasm
-neoForge.ideSyncTask copyWasm
+sourceSets.main.java.srcDir(files(wasmSources).builtBy(compileWasmToJava))
+dependencies {
+    compileOnly(files(wasmClasses).builtBy(compileWasmToJava))
+}
+sourceSets.main.resources.srcDir(files(wasmClasses).builtBy(compileWasmToJava))
+neoForge.ideSyncTask compileWasmToJava
 
 
 

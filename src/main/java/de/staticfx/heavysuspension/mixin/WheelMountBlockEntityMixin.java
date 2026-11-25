@@ -10,18 +10,17 @@ import de.staticfx.heavysuspension.VehicleLoads;
 import de.staticfx.heavysuspension.WheelContact;
 import de.staticfx.heavysuspension.WheelPhysics;
 import de.staticfx.heavysuspension.behaviors.StiffnessBehaviour;
-import de.staticfx.heavysuspension.data.WheelInput;
-import de.staticfx.heavysuspension.data.WheelTuning;
-import dev.ryanhcode.sable.api.physics.force.ForceTotal;
+import de.staticfx.heavysuspension.data.BodyMotion;
 import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
 import dev.ryanhcode.sable.api.physics.mass.MassData;
 import dev.ryanhcode.sable.companion.math.Pose3d;
+import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysicsData;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -34,28 +33,22 @@ import java.util.List;
 @Pseudo
 @Mixin(targets = "dev.ryanhcode.offroad.content.blocks.wheel_mount.WheelMountBlockEntity", remap = false)
 public abstract class WheelMountBlockEntityMixin implements WheelContact {
-    @Shadow
-    private ForceTotal forceTotal;
-
     @Unique
     private static final double DAMPING_RATIO = 0.7;
+    @Unique
+    private static final double REST_LENGTH = 0.65;
 
     @Unique
-    private WheelTuning heavysuspension$tuning;
-    @Unique
-    private double heavysuspension$heaveForce;
-    @Unique
-    private boolean heavysuspension$touching;
-    @Unique
-    private double heavysuspension$heaveVelocity;
-    @Unique
-    private double heavysuspension$rotationVelocity;
+    private double heavysuspension$compression = NOT_IN_RANGE;
 
     @Inject(method = "addBehaviours", at = @At("TAIL"))
     private void heavysuspension$replaceStrengthDial(List<BlockEntityBehaviour> behaviours, CallbackInfo ci) {
-        for (BlockEntityBehaviour behaviour : behaviours)
-            if (behaviour.getType() == ScrollValueBehaviour.TYPE && behaviour instanceof ScrollValueBehaviour originalDial)
+        for (BlockEntityBehaviour behaviour : behaviours) {
+            if (behaviour.getType() == ScrollValueBehaviour.TYPE && behaviour instanceof ScrollValueBehaviour originalDial) {
                 originalDial.onlyActiveWhen(() -> false);
+            }
+        }
+
         behaviours.add(new StiffnessBehaviour((SmartBlockEntity) (Object) this));
     }
 
@@ -65,17 +58,10 @@ public abstract class WheelMountBlockEntityMixin implements WheelContact {
     }
 
     @ModifyVariable(method = "sable$physicsTick", at = @At("STORE"), name = "springStrength")
-    private double heavysuspension$tuneSpring(double springStrength,
-                                              @Local(name = "normalMass") double normalMass,
-                                              @Local(name = "massData") MassData massData,
-                                              @Local(argsOnly = true) ServerSubLevel subLevel,
-                                              @Local(argsOnly = true) double timeStep) {
-        heavysuspension$tuning = heavysuspension$tune(normalMass, massData, subLevel, timeStep);
-        heavysuspension$touching = false;
-
-        if (heavysuspension$tuning != null) {
-            return heavysuspension$tuning.springiness();
-        }
+    private double heavysuspension$stiffenSpring(double springStrength,
+                                                 @Local(name = "normalMass") double normalMass,
+                                                 @Local(argsOnly = true) double timeStep) {
+        heavysuspension$compression = NOT_IN_RANGE;
 
         double stiffened = springStrength * heavysuspension$stiffnessMultiplier();
         if (!heavysuspension$isUsableMass(normalMass)) {
@@ -94,67 +80,46 @@ public abstract class WheelMountBlockEntityMixin implements WheelContact {
         return 2 * DAMPING_RATIO * Math.sqrt(springStrength * normalMass);
     }
 
-    @ModifyVariable(method = "sable$physicsTick", at = @At("STORE"), name = "dampingForce")
-    private double heavysuspension$splitDamping(double dampingForce,
-                                                @Local(name = "localVelocity") Vector3d localVelocity,
-                                                @Local(name = "pose") Pose3d pose,
-                                                @Local(argsOnly = true) RigidBodyHandle handle) {
-        heavysuspension$heaveForce = 0;
-        double heaveVelocity = pose.transformNormalInverse(handle.getLinearVelocity(new Vector3d())).y;
-        double rotationVelocity = localVelocity.y - heaveVelocity;
-        heavysuspension$heaveVelocity = heaveVelocity;
-        heavysuspension$rotationVelocity = rotationVelocity;
-
-        if (heavysuspension$tuning == null) {
-            return dampingForce;
-        }
-
-        heavysuspension$heaveForce = -heavysuspension$tuning.heaveDamping() * heaveVelocity;
-
-        return -heavysuspension$tuning.rotationDamping() * rotationVelocity;
-    }
-
     @ModifyVariable(method = "sable$physicsTick", at = @At("STORE"), name = "springForce")
-    private double heavysuspension$onlyPush(double springForce,
-                                            @Local(name = "springLength") double springLength,
-                                            @Local(argsOnly = true) double timeStep) {
-        if (springLength >= 0.65) {
-            return 0;
+    private double heavysuspension$solveSuspension(double springForce,
+                                                   @Local(name = "springLength") double springLength,
+                                                   @Local(name = "distance") double distance,
+                                                   @Local(name = "radius") float radius,
+                                                   @Local(name = "massData") MassData massData,
+                                                   @Local(name = "pose") Pose3d pose,
+                                                   @Local(argsOnly = true) ServerSubLevel subLevel,
+                                                   @Local(argsOnly = true) RigidBodyHandle handle,
+                                                   @Local(argsOnly = true) double timeStep) {
+        BlockEntity self = (BlockEntity) (Object) this;
+        heavysuspension$compression = REST_LENGTH - (distance - radius);
+
+        double fallback = springLength >= REST_LENGTH ? 0 : Math.max(0, springForce);
+        WheelPhysics physics = PhysicsProvider.physics();
+        if (physics == null || self.getLevel() == null) {
+            return fallback;
         }
 
-        heavysuspension$touching = true;
-        double push = Math.max(0, springForce);
-        double heaveImpulse = 0;
-
-        if (heavysuspension$tuning != null) {
-            heaveImpulse = Math.max(heavysuspension$heaveForce * timeStep, -push);
-            forceTotal.applyLinearImpulse(new Vector3d(0, heaveImpulse, 0));
+        VehicleLoads loads = VehicleLoads.of(subLevel, self, massData, timeStep, physics);
+        double impulse = loads.impulseFor(self, massData, heavysuspension$motion(pose, handle, self), timeStep, physics);
+        if (!Double.isFinite(impulse)) {
+            return fallback;
         }
 
-        SuspensionDebug.logWheel((BlockEntity) (Object) this, heavysuspension$tuning, 0.65 - springLength,
-                push, heaveImpulse, heavysuspension$heaveVelocity, heavysuspension$rotationVelocity);
-        return push;
+        SuspensionDebug.logWheel(self, heavysuspension$compression, impulse, fallback);
+        return impulse;
     }
 
     @Unique
-    private WheelTuning heavysuspension$tune(double normalMass, MassData massData, ServerSubLevel subLevel, double timeStep) {
-        WheelPhysics physics = PhysicsProvider.physics();
-        BlockEntity self = (BlockEntity) (Object) this;
-        if (physics == null || self.getLevel() == null)
-            return null;
+    private static BodyMotion heavysuspension$motion(Pose3d pose, RigidBodyHandle handle, BlockEntity self) {
+        Vector3d linear = pose.transformNormalInverse(handle.getLinearVelocity(new Vector3d()));
+        Vector3d angular = pose.transformNormalInverse(handle.getAngularVelocity(new Vector3d()));
+        Vector3d gravity = pose.transformNormalInverse(DimensionPhysicsData.getGravity(self.getLevel(), pose.position()));
+        return new BodyMotion(heavysuspension$vec(linear), heavysuspension$vec(angular), heavysuspension$vec(gravity));
+    }
 
-        VehicleLoads loads = VehicleLoads.of(subLevel, self, massData, timeStep, physics);
-
-        WheelInput input = new WheelInput(
-                massData.getMass(),
-                normalMass,
-                loads.loadFraction(self),
-                heavysuspension$stiffnessMultiplier(),
-                loads.wheelCount(),
-                loads.touchingCount(),
-                timeStep);
-
-        return physics.tuneWheel(input).orElse(null);
+    @Unique
+    private static Vec3 heavysuspension$vec(Vector3d vector) {
+        return new Vec3(vector.x, vector.y, vector.z);
     }
 
     @Unique
@@ -169,7 +134,7 @@ public abstract class WheelMountBlockEntityMixin implements WheelContact {
     }
 
     @Override
-    public boolean heavysuspension$isTouching() {
-        return heavysuspension$touching;
+    public double heavysuspension$compression() {
+        return heavysuspension$compression;
     }
 }

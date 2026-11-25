@@ -2,9 +2,10 @@ use std::alloc::{alloc as rust_alloc, dealloc as rust_dealloc, Layout};
 use glam::{DMat3, DVec2, DVec3};
 use crate::sable::MassData;
 use crate::suspension::suspension_for_normal_mass;
+use crate::solver::{calculate_impulses, BodyVelocity, SolverWheel};
 use crate::wheels::{calculate_load, Wheel};
 
-const ABI_VERSION: u32 = 3;
+const ABI_VERSION: u32 = 4;
 const ALIGN: usize = 8;
 
 #[unsafe(no_mangle)]
@@ -88,4 +89,59 @@ fn read_wheels(data: &[f64]) -> Vec<Wheel> {
             stiffness_multiplier: wheel[3],
         })
         .collect()
+}
+
+const SOLVER_VALUES_PER_WHEEL: usize = 7;
+const MOTION_VALUES: usize = 9;
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn solve_vehicle(
+    mass: *const f64,
+    wheels: *const f64,
+    wheel_count: u32,
+    motion: *const f64,
+    dt: f64,
+    impulses_out: *mut f64,
+) -> u32 {
+    let count = wheel_count as usize;
+    if count == 0 || mass.is_null() || wheels.is_null() || motion.is_null() || impulses_out.is_null() { return 0; }
+
+    let mass = unsafe { std::slice::from_raw_parts(mass, 14) };
+    let wheels = unsafe { std::slice::from_raw_parts(wheels, count * SOLVER_VALUES_PER_WHEEL) };
+    let motion = unsafe { std::slice::from_raw_parts(motion, MOTION_VALUES) };
+    let impulses_out = unsafe { std::slice::from_raw_parts_mut(impulses_out, count) };
+
+    let mass_data = read_mass(mass);
+    let wheels = read_solver_wheels(wheels);
+    let velocity = read_velocity(motion);
+    let gravity = read_gravity(motion);
+
+    let Some(impulses) = calculate_impulses(&mass_data, &wheels, &velocity, gravity, dt) else { return 0; };
+    if impulses.iter().any(|impulse| !impulse.is_finite()) { return 0; }
+
+    impulses_out.copy_from_slice(&impulses);
+    1
+}
+
+fn read_solver_wheels(data: &[f64]) -> Vec<SolverWheel> {
+    data.chunks_exact(SOLVER_VALUES_PER_WHEEL)
+        .map(|wheel| SolverWheel {
+            contact: DVec3::new(wheel[0], wheel[1], wheel[2]),
+            multiplier: wheel[3],
+            load_fraction: wheel[4],
+            compression: wheel[5],
+            age_in_steps: wheel[6],
+        })
+        .collect()
+}
+
+fn read_velocity(data: &[f64]) -> BodyVelocity {
+    BodyVelocity {
+        linear: DVec3::new(data[0], data[1], data[2]),
+        angular: DVec3::new(data[3], data[4], data[5]),
+    }
+}
+
+fn read_gravity(data: &[f64]) -> DVec3 {
+    DVec3::new(data[6], data[7], data[8])
 }
