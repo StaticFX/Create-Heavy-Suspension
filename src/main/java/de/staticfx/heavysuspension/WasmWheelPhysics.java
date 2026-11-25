@@ -29,7 +29,7 @@ public class WasmWheelPhysics implements WheelPhysics {
     }
 
     @Override
-    public Optional<WheelTuning> tuneWheel(WheelInput input) {
+    public synchronized Optional<WheelTuning> tuneWheel(WheelInput input) {
         long ok = wasmTuneWheel.apply(
                 bridge.f64(input.totalMass()),
                 bridge.f64(input.normalMass()),
@@ -52,7 +52,7 @@ public class WasmWheelPhysics implements WheelPhysics {
 
 
     @Override
-    public Optional<VehicleLoadDistribution> calculateVehicleLoadDistribution(VehicleInput input) {
+    public synchronized Optional<VehicleLoadDistribution> calculateVehicleLoadDistribution(VehicleInput input) {
         var allocSize = input.wheels().size() * Double.BYTES;
         int returnPointer = bridge.alloc(allocSize);
 

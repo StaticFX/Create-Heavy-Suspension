@@ -9,10 +9,6 @@ public class HeavySuspension {
 
     public HeavySuspension() throws ClassNotFoundException {
         Class.forName(WHEEL_MOUNT, false, HeavySuspension.class.getClassLoader());
-
-        var instance = WasmPhysicsBridge.INSTACE;
-
-        instance.sum(new int[]{1, 2, 3});
-
+        PhysicsProvider.loadProvider();
     }
 }

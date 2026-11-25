@@ -9,8 +9,6 @@ import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
 
 import java.io.InputStream;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 
 public class WasmPhysicsBridge {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -24,14 +22,12 @@ public class WasmPhysicsBridge {
 
     private final ExportFunction alloc;
     private final ExportFunction dealloc;
-    private final ExportFunction sumI32;
     private final Memory memory;
 
     private WasmPhysicsBridge(Instance wasmInstance) {
         this.wasmInstance = wasmInstance;
         this.alloc = wasmInstance.export("alloc");
         this.dealloc = wasmInstance.export("dealloc");
-        this.sumI32 = wasmInstance.export("sum_i32");
         this.memory = wasmInstance.memory();
     }
 
@@ -71,37 +67,11 @@ public class WasmPhysicsBridge {
         dealloc.apply(ptr, length);
     }
 
-    synchronized byte[] bytesFromIntArray(int[] input) {
-        ByteBuffer bb = ByteBuffer.allocate(input.length * Integer.BYTES)
-                .order(ByteOrder.LITTLE_ENDIAN);
-        bb.asIntBuffer().put(input);
-        return bb.array();
-    }
-
-    public synchronized void sum(int[] input) {
-        ByteBuffer bb = ByteBuffer.allocate(input.length * Integer.BYTES)
-                .order(ByteOrder.LITTLE_ENDIAN);
-
-        bb.asIntBuffer().put(input);
-        byte[] bytes = bb.array();
-
-        int ptr = (int) alloc.apply(bytes.length)[0];
-        try {
-            memory.write(ptr, bytes);
-            long sum = sumI32.apply(ptr, input.length)[0];
-            LOGGER.info("Sum is {}", sum);
-        } finally {
-            dealloc.apply(ptr, bytes.length);
-        }
-    }
-
     public long f64(double in) {
         return Value.doubleToLong(in);
     }
 
-
     public double fromf64(int ptr, int index) {
         return memory.readDouble(ptr + index * Double.BYTES);
     }
-
 }
