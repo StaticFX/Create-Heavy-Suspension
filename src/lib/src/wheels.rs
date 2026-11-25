@@ -2,7 +2,7 @@ use std::cmp::min;
 use glam::{DMat2, DVec2, DVec3};
 use crate::engine::is_usable_mass;
 use crate::sable::MassData;
-use crate::suspension::{target_tension, SPRING_FREQUENCY, SPRING_STABILITY, max_tension, Suspension};
+use crate::suspension::Suspension;
 
 pub struct Wheel {
     pub touch_point: DVec3,
@@ -55,26 +55,6 @@ pub fn calculate_load(wheels: &[Wheel], center_of_mass: DVec2) -> Load {
 
     let total: f64 = fractions.iter().sum();
     fractions.iter().map(|f| f / total).collect()
-}
-
-pub fn calculate_relative_spring_tension(wheels: &[Wheel], load: &Load, mass: &MassData, dt: f64) -> f64 {
-    let smallest_spring = wheels.iter()
-        .map(|w| w.stiffness_multiplier)
-        .min_by(f64::total_cmp)
-        .unwrap_or(1f64);
-
-    wheels
-        .iter()
-        .zip(load)
-        .filter_map(|(wheel, fraction)| {
-            let normal_mass = 1.0 / mass.inverse_normal_mass(wheel.touch_point, DVec3::Y);
-            if !is_usable_mass(normal_mass) {
-                return None;
-            }
-            let target = target_tension(mass.total_mass * fraction, smallest_spring);
-            Some(max_tension(normal_mass, wheels.len(), dt) / target)
-        })
-        .fold(1.0, f64::min)
 }
 
 pub fn calculate_wheel_impulses(

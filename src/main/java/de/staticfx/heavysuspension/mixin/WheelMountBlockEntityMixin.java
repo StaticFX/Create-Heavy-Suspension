@@ -5,7 +5,9 @@ import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollValueBehaviour;
 import de.staticfx.heavysuspension.PhysicsProvider;
+import de.staticfx.heavysuspension.SuspensionDebug;
 import de.staticfx.heavysuspension.VehicleLoads;
+import de.staticfx.heavysuspension.WheelContact;
 import de.staticfx.heavysuspension.WheelPhysics;
 import de.staticfx.heavysuspension.behaviors.StiffnessBehaviour;
 import de.staticfx.heavysuspension.data.WheelInput;
@@ -31,7 +33,7 @@ import java.util.List;
 
 @Pseudo
 @Mixin(targets = "dev.ryanhcode.offroad.content.blocks.wheel_mount.WheelMountBlockEntity", remap = false)
-public abstract class WheelMountBlockEntityMixin {
+public abstract class WheelMountBlockEntityMixin implements WheelContact {
     @Shadow
     private ForceTotal forceTotal;
 
@@ -42,6 +44,12 @@ public abstract class WheelMountBlockEntityMixin {
     private WheelTuning heavysuspension$tuning;
     @Unique
     private double heavysuspension$heaveForce;
+    @Unique
+    private boolean heavysuspension$touching;
+    @Unique
+    private double heavysuspension$heaveVelocity;
+    @Unique
+    private double heavysuspension$rotationVelocity;
 
     @Inject(method = "addBehaviours", at = @At("TAIL"))
     private void heavysuspension$replaceStrengthDial(List<BlockEntityBehaviour> behaviours, CallbackInfo ci) {
@@ -63,6 +71,7 @@ public abstract class WheelMountBlockEntityMixin {
                                               @Local(argsOnly = true) ServerSubLevel subLevel,
                                               @Local(argsOnly = true) double timeStep) {
         heavysuspension$tuning = heavysuspension$tune(normalMass, massData, subLevel, timeStep);
+        heavysuspension$touching = false;
 
         if (heavysuspension$tuning != null) {
             return heavysuspension$tuning.springiness();
@@ -91,13 +100,14 @@ public abstract class WheelMountBlockEntityMixin {
                                                 @Local(name = "pose") Pose3d pose,
                                                 @Local(argsOnly = true) RigidBodyHandle handle) {
         heavysuspension$heaveForce = 0;
+        double heaveVelocity = pose.transformNormalInverse(handle.getLinearVelocity(new Vector3d())).y;
+        double rotationVelocity = localVelocity.y - heaveVelocity;
+        heavysuspension$heaveVelocity = heaveVelocity;
+        heavysuspension$rotationVelocity = rotationVelocity;
 
         if (heavysuspension$tuning == null) {
             return dampingForce;
         }
-
-        double heaveVelocity = pose.transformNormalInverse(handle.getLinearVelocity(new Vector3d())).y;
-        double rotationVelocity = localVelocity.y - heaveVelocity;
 
         heavysuspension$heaveForce = -heavysuspension$tuning.heaveDamping() * heaveVelocity;
 
@@ -112,12 +122,17 @@ public abstract class WheelMountBlockEntityMixin {
             return 0;
         }
 
+        heavysuspension$touching = true;
         double push = Math.max(0, springForce);
+        double heaveImpulse = 0;
 
         if (heavysuspension$tuning != null) {
-            forceTotal.applyLinearImpulse(new Vector3d(0, Math.max(heavysuspension$heaveForce * timeStep, -push), 0));
+            heaveImpulse = Math.max(heavysuspension$heaveForce * timeStep, -push);
+            forceTotal.applyLinearImpulse(new Vector3d(0, heaveImpulse, 0));
         }
 
+        SuspensionDebug.logWheel((BlockEntity) (Object) this, heavysuspension$tuning, 0.65 - springLength,
+                push, heaveImpulse, heavysuspension$heaveVelocity, heavysuspension$rotationVelocity);
         return push;
     }
 
@@ -135,8 +150,8 @@ public abstract class WheelMountBlockEntityMixin {
                 normalMass,
                 loads.loadFraction(self),
                 heavysuspension$stiffnessMultiplier(),
-                loads.springScale(),
                 loads.wheelCount(),
+                loads.touchingCount(),
                 timeStep);
 
         return physics.tuneWheel(input).orElse(null);
@@ -151,5 +166,10 @@ public abstract class WheelMountBlockEntityMixin {
     private double heavysuspension$stiffnessMultiplier() {
         StiffnessBehaviour stiffness = ((SmartBlockEntity) (Object) this).getBehaviour(StiffnessBehaviour.TYPE);
         return stiffness == null ? 1 : stiffness.multiplier();
+    }
+
+    @Override
+    public boolean heavysuspension$isTouching() {
+        return heavysuspension$touching;
     }
 }

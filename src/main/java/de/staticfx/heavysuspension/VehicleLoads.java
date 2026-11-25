@@ -54,9 +54,14 @@ public final class VehicleLoads {
         return index < 0 ? 1.0 / wheelCount() : distribution.loadFractions()[index];
     }
 
-    public double springScale() {
-        return distribution.springScale();
+    public int touchingCount() {
+        int touching = 0;
+        for (BlockEntity wheel : wheels)
+            if (wheel instanceof WheelContact contact && contact.heavysuspension$isTouching())
+                touching++;
+        return touching;
     }
+
 
     private static VehicleLoads compute(ServerSubLevel subLevel, Class<?> wheelType, MassData massData, double timeStep, WheelPhysics physics, long tick) {
         List<BlockEntity> wheels = new ArrayList<>();
@@ -92,7 +97,7 @@ public final class VehicleLoads {
         double[] fractions = new double[wheelCount];
         Arrays.fill(fractions, 1.0 / Math.max(1, wheelCount));
 
-        return new VehicleLoadDistribution(fractions, 1.0);
+        return new VehicleLoadDistribution(fractions);
     }
 
     private static Vec3 contactPoint(BlockEntity wheel) {

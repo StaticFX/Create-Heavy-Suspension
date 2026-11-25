@@ -13,7 +13,7 @@ import java.io.InputStream;
 public class WasmPhysicsBridge {
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    private static final int ABI_VERSION = 1;
+    private static final int ABI_VERSION = 3;
 
     public static WasmPhysicsBridge INSTACE = load();
 

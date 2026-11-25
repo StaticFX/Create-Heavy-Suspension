@@ -35,8 +35,8 @@ public class WasmWheelPhysics implements WheelPhysics {
                 bridge.f64(input.normalMass()),
                 bridge.f64(input.loadFraction()),
                 bridge.f64(input.stiffnessMultiplier()),
-                bridge.f64(input.springScale()),
                 input.wheelCount(),
+                input.touchingCount(),
                 bridge.f64(input.timeStep()),
                 tuneWheelOutPtr)[0];
 
@@ -60,25 +60,22 @@ public class WasmWheelPhysics implements WheelPhysics {
         int massPtr = writeMassToMemory(input.mass());
         int wheelPtr = writeWheelsToMemory(input.wheels());
 
-        long springScaleLong = wasmCalcDistribution.apply(
+        long ok = wasmCalcDistribution.apply(
                 massPtr,
                 wheelPtr,
                 wheelCount,
-                bridge.f64(input.timeStep()),
                 returnPointer
         )[0];
 
-
         try {
-            double springScale = Value.longToDouble(springScaleLong);
-            if (Double.isNaN(springScale))
+            if (ok == 0)
                 return Optional.empty();
 
             double[] fractions = new double[wheelCount];
             for (int i = 0; i < wheelCount; i++)
                 fractions[i] = bridge.fromf64(returnPointer, i);
 
-            return Optional.of(new VehicleLoadDistribution(fractions, springScale));
+            return Optional.of(new VehicleLoadDistribution(fractions));
         } finally {
             bridge.dealloc(massPtr, MASS_BYTES);
             bridge.dealloc(wheelPtr, wheelBytes(wheelCount));

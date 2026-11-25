@@ -2,9 +2,9 @@ use std::alloc::{alloc as rust_alloc, dealloc as rust_dealloc, Layout};
 use glam::{DMat3, DVec2, DVec3};
 use crate::sable::MassData;
 use crate::suspension::suspension_for_normal_mass;
-use crate::wheels::{calculate_load, Wheel, calculate_relative_spring_tension};
+use crate::wheels::{calculate_load, Wheel};
 
-const ABI_VERSION: u32 = 1;
+const ABI_VERSION: u32 = 3;
 const ALIGN: usize = 8;
 
 #[unsafe(no_mangle)]
@@ -30,13 +30,13 @@ pub unsafe extern "C" fn suspension(
     normal_mass: f64,
     load_fraction: f64,
     multiplier: f64,
-    spring_scale: f64,
     wheel_count: u32,
+    touching_count: u32,
     dt: f64,
     out: *mut f64,
 ) -> u32 {
     let Some(suspension) = suspension_for_normal_mass(
-        total_mass, normal_mass, load_fraction, multiplier, spring_scale, wheel_count as usize, dt,
+        total_mass, normal_mass, load_fraction, multiplier, wheel_count as usize, touching_count as usize, dt,
     ) else {
         return 0;
     };
@@ -47,10 +47,10 @@ pub unsafe extern "C" fn suspension(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn calc_distribution(mass: *const f64, wheels: *const f64, wheel_count: u32, dt: f64, fractions_out: *mut f64) -> f64 {
+pub unsafe extern "C" fn calc_distribution(mass: *const f64, wheels: *const f64, wheel_count: u32, fractions_out: *mut f64) -> u32 {
     let count = wheel_count as usize;
     if count == 0 || mass.is_null() || wheels.is_null() || fractions_out.is_null() {
-        return f64::NAN;
+        return 0;
     }
 
     let mass = unsafe { std::slice::from_raw_parts(mass, 14) };
@@ -63,10 +63,12 @@ pub unsafe extern "C" fn calc_distribution(mass: *const f64, wheels: *const f64,
 
     let center_of_mass = DVec2::new(mass_data.center_of_mass.x, mass_data.center_of_mass.z);
     let fractions = calculate_load(&wheels, center_of_mass);
-    let spring_scale = calculate_relative_spring_tension(&wheels, &fractions, &mass_data, dt);
+    if fractions.iter().any(|fraction| !fraction.is_finite()) {
+        return 0;
+    }
 
     fractions_out.copy_from_slice(&fractions);
-    spring_scale
+    1
 }
 
 

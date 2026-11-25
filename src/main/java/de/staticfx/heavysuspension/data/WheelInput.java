@@ -5,6 +5,6 @@ public record WheelInput(
         double normalMass,
         double loadFraction,
         double stiffnessMultiplier,
-        double springScale,
         int wheelCount,
+        int touchingCount,
         double timeStep) {}
