@@ -17,6 +17,7 @@ import dev.ryanhcode.sable.companion.math.Pose3d;
 import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysicsData;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.core.Vec3i;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
 import org.spongepowered.asm.mixin.Mixin;
@@ -40,6 +41,12 @@ public abstract class WheelMountBlockEntityMixin implements WheelContact {
 
     @Unique
     private double heavysuspension$compression = NOT_IN_RANGE;
+    @Unique
+    private boolean heavysuspension$solved;
+    @Unique
+    private double heavysuspension$impulse;
+    @Unique
+    private double heavysuspension$offroadImpulse;
 
     @Inject(method = "addBehaviours", at = @At("TAIL"))
     private void heavysuspension$replaceStrengthDial(List<BlockEntityBehaviour> behaviours, CallbackInfo ci) {
@@ -92,8 +99,12 @@ public abstract class WheelMountBlockEntityMixin implements WheelContact {
                                                    @Local(argsOnly = true) double timeStep) {
         BlockEntity self = (BlockEntity) (Object) this;
         heavysuspension$compression = REST_LENGTH - (distance - radius);
+        heavysuspension$solved = false;
 
         double fallback = springLength >= REST_LENGTH ? 0 : Math.max(0, springForce);
+        heavysuspension$offroadImpulse = fallback;
+        heavysuspension$impulse = fallback;
+
         WheelPhysics physics = PhysicsProvider.physics();
         if (physics == null || self.getLevel() == null) {
             return fallback;
@@ -105,8 +116,21 @@ public abstract class WheelMountBlockEntityMixin implements WheelContact {
             return fallback;
         }
 
-        SuspensionDebug.logWheel(self, heavysuspension$compression, impulse, fallback);
+        heavysuspension$solved = true;
+        heavysuspension$impulse = impulse;
         return impulse;
+    }
+
+    @ModifyVariable(method = "sable$physicsTick", at = @At(value = "STORE", ordinal = 2), name = "localForce")
+    private Vec3 heavysuspension$pushAlongSuspension(Vec3 localForce, @Local(name = "rayHitNormal") Vec3i rayHitNormal) {
+        BlockEntity self = (BlockEntity) (Object) this;
+        SuspensionDebug.logWheel(self, heavysuspension$compression, heavysuspension$impulse, heavysuspension$offroadImpulse, rayHitNormal, localForce);
+
+        if (!heavysuspension$solved) {
+            return localForce;
+        }
+
+        return new Vec3(0, heavysuspension$impulse, 0);
     }
 
     @Unique
