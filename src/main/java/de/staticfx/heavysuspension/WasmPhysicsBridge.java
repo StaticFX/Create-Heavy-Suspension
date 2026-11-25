@@ -99,6 +99,7 @@ public class WasmPhysicsBridge {
         return Value.doubleToLong(in);
     }
 
+
     public double fromf64(int ptr, int index) {
         return memory.readDouble(ptr + index * Double.BYTES);
     }

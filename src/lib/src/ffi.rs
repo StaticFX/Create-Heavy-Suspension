@@ -47,7 +47,7 @@ pub unsafe extern "C" fn suspension(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn load_distribution(mass: *const f64, wheels: *const f64, wheel_count: u32, dt: f64, fractions_out: *mut f64) -> f64 {
+pub unsafe extern "C" fn calc_distribution(mass: *const f64, wheels: *const f64, wheel_count: u32, dt: f64, fractions_out: *mut f64) -> f64 {
     let count = wheel_count as usize;
     if count == 0 || mass.is_null() || wheels.is_null() || fractions_out.is_null() {
         return f64::NAN;

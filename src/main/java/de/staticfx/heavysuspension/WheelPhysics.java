@@ -10,5 +10,5 @@ import java.util.Optional;
 
 public interface WheelPhysics {
     Optional<WheelTuning> tuneWheel(WheelInput input);
-    VehicleLoadDistribution calculateVehicleLoadDistribution(VehicleInput input);
+    Optional<VehicleLoadDistribution> calculateVehicleLoadDistribution(VehicleInput input);
 }
