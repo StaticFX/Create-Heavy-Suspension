@@ -39,10 +39,10 @@ pub fn calculate_load(wheels: &[Wheel], center_of_mass: DVec2) -> Load {
 
     let center_of_wheels: DVec2 = wheels.iter().map(|w| DVec2::new(w.touch_point.x, w.touch_point.z)).sum::<DVec2>() / len;
     let offsets: Vec<DVec2> = wheels.iter().map(|w| DVec2::new(w.touch_point.x, w.touch_point.z)).map(|t| t - center_of_wheels).collect();
-    let mass_offset = center_of_wheels - center_of_mass;
+    let mass_offset = center_of_mass - center_of_wheels;
 
     let spread = offsets.iter().fold(
-        DMat2::from_diagonal(DVec2::splat(0f64)),
+        DMat2::from_diagonal(DVec2::splat(1e-6)),
         |m, &o| m + DMat2::from_cols(o * o.x, o * o.y),
     );
 
