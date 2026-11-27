@@ -47,6 +47,8 @@ public abstract class WheelMountBlockEntityMixin implements WheelContact {
     private double heavysuspension$impulse;
     @Unique
     private double heavysuspension$offroadImpulse;
+    @Unique
+    private Vec3 heavysuspension$groundUp = new Vec3(0, 1, 0);
 
     @Inject(method = "addBehaviours", at = @At("TAIL"))
     private void heavysuspension$replaceStrengthDial(List<BlockEntityBehaviour> behaviours, CallbackInfo ci) {
@@ -111,7 +113,10 @@ public abstract class WheelMountBlockEntityMixin implements WheelContact {
         }
 
         VehicleLoads loads = VehicleLoads.of(subLevel, self, massData, timeStep, physics);
-        double impulse = loads.impulseFor(self, massData, heavysuspension$motion(pose, handle, self), timeStep, physics);
+        BodyMotion motion = heavysuspension$motion(pose, handle, self);
+        heavysuspension$groundUp = heavysuspension$groundUp(motion.gravity());
+
+        double impulse = loads.impulseFor(self, massData, motion, timeStep, physics);
         if (!Double.isFinite(impulse)) {
             return fallback;
         }
@@ -122,7 +127,7 @@ public abstract class WheelMountBlockEntityMixin implements WheelContact {
     }
 
     @ModifyVariable(method = "sable$physicsTick", at = @At(value = "STORE", ordinal = 2), name = "localForce")
-    private Vec3 heavysuspension$pushAlongSuspension(Vec3 localForce, @Local(name = "rayHitNormal") Vec3i rayHitNormal) {
+    private Vec3 heavysuspension$pushAgainstGravity(Vec3 localForce, @Local(name = "rayHitNormal") Vec3i rayHitNormal) {
         BlockEntity self = (BlockEntity) (Object) this;
         SuspensionDebug.logWheel(self, heavysuspension$compression, heavysuspension$impulse, heavysuspension$offroadImpulse, rayHitNormal, localForce);
 
@@ -130,7 +135,16 @@ public abstract class WheelMountBlockEntityMixin implements WheelContact {
             return localForce;
         }
 
-        return new Vec3(0, heavysuspension$impulse, 0);
+        return heavysuspension$groundUp.scale(heavysuspension$impulse);
+    }
+
+    @Unique
+    private static Vec3 heavysuspension$groundUp(Vec3 gravity) {
+        if (gravity.lengthSqr() == 0) {
+            return new Vec3(0, 1, 0);
+        }
+
+        return gravity.normalize().reverse();
     }
 
     @Unique

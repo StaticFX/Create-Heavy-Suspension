@@ -6,7 +6,6 @@ use crate::suspension::{DAMPING_RATIO, spring_rate};
 
 const SOLVER_ITERATIONS: usize = 32;
 const CONVERGED: f64 = 1e-4;
-const UP: DVec3 = DVec3::Y;
 
 #[derive(Clone, Copy, Debug)]
 pub struct SolverWheel {
@@ -38,7 +37,7 @@ pub fn calculate_impulses(mass: &MassData, wheels: &[SolverWheel], velocity: &Bo
 
     let constraints: Vec<Option<Constraint>> = wheels
         .iter()
-        .map(|wheel| constraint_for(mass, wheel, velocity, gravity, dt))
+        .map(|wheel| constraint_for(mass, wheel, velocity, gravity, ground_up(gravity), dt))
         .collect();
 
     let active: Vec<usize> = (0..wheels.len()).filter(|&i| constraints[i].is_some()).collect();
@@ -80,9 +79,13 @@ pub fn calculate_impulses(mass: &MassData, wheels: &[SolverWheel], velocity: &Bo
     Some(impulses)
 }
 
-fn constraint_for(mass: &MassData, wheel: &SolverWheel, velocity: &BodyVelocity, gravity: DVec3, dt: f64) -> Option<Constraint> {
+fn ground_up(gravity: DVec3) -> DVec3 {
+    if gravity.length_squared() > 0.0 { -gravity.normalize() } else { DVec3::Y }
+}
+
+fn constraint_for(mass: &MassData, wheel: &SolverWheel, velocity: &BodyVelocity, gravity: DVec3, up: DVec3, dt: f64) -> Option<Constraint> {
     let lever = wheel.contact - mass.center_of_mass;
-    let wheel_velocity = (velocity.linear + velocity.angular.cross(lever)).dot(UP);
+    let wheel_velocity = (velocity.linear + velocity.angular.cross(lever)).dot(up);
     let compression = wheel.compression - wheel.age_in_steps * wheel_velocity * dt;
     if compression <= 0.0 {
         return None;
@@ -96,9 +99,9 @@ fn constraint_for(mass: &MassData, wheel: &SolverWheel, velocity: &BodyVelocity,
         return None;
     }
 
-    let velocity_after_gravity = wheel_velocity + gravity.dot(UP) * dt;
+    let velocity_after_gravity = wheel_velocity + gravity.dot(up) * dt;
     Some(Constraint {
-        rotation_axis: lever.cross(UP),
+        rotation_axis: lever.cross(up),
         compliance: 1.0 / (dt * response),
         target_velocity: spring * compression / response - velocity_after_gravity,
     })
@@ -110,6 +113,7 @@ mod tests {
     use crate::suspension::BASE_SPRING_RATE;
     use glam::DMat3;
 
+    const UP: DVec3 = DVec3::Y;
     const GRAVITY: f64 = 9.81;
     const DT: f64 = 0.025;
     const REST_LENGTH: f64 = 1.0;
